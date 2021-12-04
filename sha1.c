@@ -1,7 +1,3 @@
-/**
-* @file sha1.c SHA-1 in C
-*/
-
 /*
 By Steve Reid <sreid@sea-to-sky.net>
 100% Public Domain
@@ -69,27 +65,10 @@ use SHA1_ prefix for public api
 move public api to sha1.h
 */
 
-/*
-Test Vectors (from FIPS PUB 180-1)
-"abc"
-  A9993E36 4706816A BA3E2571 7850C26C 9CD0D89D
-"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
-  84983E44 1C3BD26E BAAE4AA1 F95129E5 E54670F1
-A million repetitions of "a"
-  34AA973C D4C4DAA4 F61EEB2B DBAD2731 6534016F
-*/
-
-#define SHA1HANDSOFF (1)
-
 #include <stdint.h>
-
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
-#include <stdio.h>
 #include <string.h>
-#include <sha/sha.h>
+
+#include "sha1.h"
 
 void SHA1_Transform(uint32_t state[5], const uint8_t buffer[64]);
 
@@ -137,13 +116,9 @@ void SHA1_Transform(uint32_t state[5], const uint8_t buffer[64]) {
     } CHAR64LONG16;
     CHAR64LONG16 *block;
 
-#ifdef SHA1HANDSOFF
     CHAR64LONG16 workspace;
     block = &workspace;
     memcpy(block, buffer, 64);
-#else
-	block = (CHAR64LONG16*)buffer;
-#endif
 
     /* Copy context->state[] to working vars */
     a = state[0];
@@ -322,7 +297,20 @@ void SHA1_Final(uint8_t digest[SHA1_DIGEST_SIZE], SHA1_CTX *context) {
     memset(context->count, 0, 8);
     memset(finalcount, 0, 8);    /* SWR */
 
-#ifdef SHA1HANDSOFF  /* make SHA1Transform overwrite its own static vars */
+    /* make SHA1Transform overwrite its own static vars */
     SHA1_Transform(context->state, context->buffer);
-#endif
+}
+
+/**
+* Compute the SHA1 hash
+* @param in      Buffer to run SHA1 on
+* @param len     Number of bytes
+* @param digest  Generated message digest
+*/
+void SHA1_Buf(const void *in, size_t len, uint8_t digest[SHA1_DIGEST_SIZE]) {
+	SHA1_CTX ctx;
+
+	SHA1_Init(&ctx);
+	SHA1_Update(&ctx, in, len);
+	SHA1_Final(digest, &ctx);
 }
