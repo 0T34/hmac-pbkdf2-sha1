@@ -224,93 +224,185 @@ void SHA1_Transform(uint32_t state[5], const uint8_t buffer[64]) {
 /**
 * Initialize new context
 *
-* @param context SHA1-Context
+* @param ctx SHA1-Context
 */
-void SHA1_Init(SHA1_CTX *context) {
+void SHA1_Init(SHA1_CTX *ctx) {
     /* SHA1 initialization constants */
-    context->state[0] = 0x67452301;
-    context->state[1] = 0xefcdab89;
-    context->state[2] = 0x98badcfe;
-    context->state[3] = 0x10325476;
-    context->state[4] = 0xc3d2e1f0;
-    context->count[0] = context->count[1] = 0;
+    ctx->state[0] = 0x67452301;
+    ctx->state[1] = 0xefcdab89;
+    ctx->state[2] = 0x98badcfe;
+    ctx->state[3] = 0x10325476;
+    ctx->state[4] = 0xc3d2e1f0;
+    ctx->count[0] = ctx->count[1] = 0;
 }
 
 
 /**
 * Run your data through this
 *
-* @param context SHA1-Context
+* @param ctx     SHA1-Context
 * @param p       Buffer to run SHA1 on
 * @param len     Number of bytes
 */
-void SHA1_Update(SHA1_CTX *context, const void *p, size_t len) {
+void SHA1_Update(SHA1_CTX *ctx, const void *p, size_t len) {
     const uint8_t *data = p;
     size_t i, j;
 
-    j = (context->count[0] >> 3) & 63;
-    if ((context->count[0] += (uint32_t) (len << 3)) < (len << 3)) {
-        context->count[1]++;
+    j = (ctx->count[0] >> 3) & 63;
+    if ((ctx->count[0] += (uint32_t) (len << 3)) < (len << 3)) {
+        ctx->count[1]++;
     }
-    context->count[1] += (uint32_t) (len >> 29);
+    ctx->count[1] += (uint32_t) (len >> 29);
     if ((j + len) > 63) {
-        memcpy(&context->buffer[j], data, (i = 64 - j));
-        SHA1_Transform(context->state, context->buffer);
+        memcpy(&ctx->buffer[j], data, (i = 64 - j));
+        SHA1_Transform(ctx->state, ctx->buffer);
         for (; i + 63 < len; i += 64) {
-            SHA1_Transform(context->state, data + i);
+            SHA1_Transform(ctx->state, data + i);
         }
         j = 0;
     }
     else i = 0;
-    memcpy(&context->buffer[j], &data[i], len - i);
+    memcpy(&ctx->buffer[j], &data[i], len - i);
 }
 
 
 /**
 * Add padding and return the message digest
 *
-* @param digest  Generated message digest
-* @param context SHA1-Context
+* @param d   Generated message digest
+* @param ctx SHA1-Context
 */
-void SHA1_Final(uint8_t digest[SHA1_DIGEST_SIZE], SHA1_CTX *context) {
+void SHA1_Final(uint8_t d[SHA1_DIGEST_SIZE], SHA1_CTX *ctx) {
     uint32_t i;
     uint8_t finalcount[8];
 
     for (i = 0; i < 8; i++) {
-        finalcount[i] = (uint8_t) ((context->count[(i >= 4 ? 0 : 1)]
+        finalcount[i] = (uint8_t) ((ctx->count[(i >= 4 ? 0 : 1)]
                 >> ((3 - (i & 3)) * 8)) & 255);
     }
-    SHA1_Update(context, (uint8_t *) "\200", 1);
-    while ((context->count[0] & 504) != 448) {
-        SHA1_Update(context, (uint8_t *) "\0", 1);
+    SHA1_Update(ctx, (uint8_t *) "\200", 1);
+    while ((ctx->count[0] & 504) != 448) {
+        SHA1_Update(ctx, (uint8_t *) "\0", 1);
     }
-    SHA1_Update(context, finalcount, 8); /* Should cause SHA1_Transform */
+    SHA1_Update(ctx, finalcount, 8); /* Should cause SHA1_Transform */
     for (i = 0; i < SHA1_DIGEST_SIZE; i++) {
-        digest[i] = (uint8_t)
-                ((context->state[i >> 2] >> ((3 - (i & 3)) * 8)) & 255);
+        d[i] = (uint8_t)
+                ((ctx->state[i >> 2] >> ((3 - (i & 3)) * 8)) & 255);
     }
 
     /* Wipe variables */
     i = 0;
-    memset(context->buffer, 0, 64);
-    memset(context->state, 0, 20);
-    memset(context->count, 0, 8);
+    memset(ctx->buffer, 0, 64);
+    memset(ctx->state, 0, 20);
+    memset(ctx->count, 0, 8);
     memset(finalcount, 0, 8);    /* SWR */
 
     /* make SHA1Transform overwrite its own static vars */
-    SHA1_Transform(context->state, context->buffer);
+    SHA1_Transform(ctx->state, ctx->buffer);
 }
 
 /**
 * Compute the SHA1 hash
 * @param in      Buffer to run SHA1 on
 * @param len     Number of bytes
-* @param digest  Generated message digest
+* @param d  Generated message digest
 */
-void SHA1_Buf(const void *in, size_t len, uint8_t digest[SHA1_DIGEST_SIZE]) {
+void SHA1_Buf(const void *in, size_t len, uint8_t d[SHA1_DIGEST_SIZE]) {
 	SHA1_CTX ctx;
 
 	SHA1_Init(&ctx);
 	SHA1_Update(&ctx, in, len);
-	SHA1_Final(digest, &ctx);
+	SHA1_Final(d, &ctx);
+}
+
+/**
+* Initialize new HMAC context
+*
+* @param ctx     HMAC Context
+* @param k       Key
+* @param len     Number of bytes
+*/
+void HMAC_SHA1_Init(HMAC_SHA1_CTX *ctx, const void *_k, size_t len) {
+    const uint8_t *k = _k;
+    uint8_t key[SHA1_DIGEST_SIZE];
+    uint8_t buf[SHA1_BLOCKSIZE];
+    size_t i;
+
+    if (len > SHA1_BLOCKSIZE) {
+        SHA1_Init(&ctx->ictx);
+        SHA1_Update(&ctx->ictx, k, len);
+        SHA1_Final(key, &ctx->ictx);
+
+        k = key;
+        len = SHA1_DIGEST_SIZE;
+    }
+
+    /**** Inner Digest ****/
+    SHA1_Init(&ctx->ictx);
+
+    /* Pad the key for inner digest */
+    for (i = 0; i < len; ++i) {
+        buf[i] = k[i] ^ 0x36;
+    }
+    for (i = len; i < SHA1_BLOCKSIZE; ++i) {
+        buf[i] = 0x36;
+    }
+
+    SHA1_Update(&ctx->ictx, buf, SHA1_BLOCKSIZE);
+
+    /**** Outer Digest ****/
+    SHA1_Init(&ctx->octx);
+
+    /* Pad the key for outter digest */
+    for (i = 0; i < len; ++i) {
+        buf[i] = k[i] ^ 0x5c;
+    }
+    for (i = len; i < SHA1_BLOCKSIZE; ++i) {
+        buf[i] = 0x5c;
+    }
+
+    SHA1_Update(&ctx->octx, buf, SHA1_BLOCKSIZE);
+}
+
+/**
+* Run your data through this
+*
+* @param ctx     HMAC Context
+* @param p       Buffer to run HMAC on
+* @param len     Number of bytes
+*/
+void HMAC_SHA1_Update(HMAC_SHA1_CTX *ctx, const void *p, size_t len) {
+    SHA1_Update(&ctx->ictx, p, len);
+}
+
+/**
+* Add padding and return the message digest
+*
+* @param digest  Generated message digest
+* @param context HMAC Context
+*/
+void HMAC_SHA1_Final(uint8_t d[SHA1_DIGEST_SIZE], HMAC_SHA1_CTX *context) {
+    uint8_t isha[SHA1_DIGEST_SIZE];
+
+    SHA1_Final(isha, &context->ictx);
+    SHA1_Update(&context->octx, isha, SHA1_DIGEST_SIZE);
+    SHA1_Final(d, &context->octx);
+}
+
+/**
+* Function to compute the digest
+*
+* @param k      key
+* @param klen   Key number of bytes
+* @param in     Buffer to run HMAC on
+* @param inlen  Buffer number of bytes
+* @param d      Generated message digest
+*/
+void HMAC_SHA1_Buf(const void *k, size_t klen, 
+                   const void *in, size_t inlen, uint8_t d[SHA1_DIGEST_SIZE]) {
+    HMAC_SHA1_CTX ctx;
+
+	HMAC_SHA1_Init(&ctx, k, klen);
+	HMAC_SHA1_Update(&ctx, in, inlen);
+	HMAC_SHA1_Final(d, &ctx);
 }
