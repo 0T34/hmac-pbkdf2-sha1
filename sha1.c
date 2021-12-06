@@ -65,10 +65,20 @@ use SHA1_ prefix for public api
 move public api to sha1.h
 */
 
+#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 
 #include "sha1.h"
+
+static void be32enc(void * pp, uint32_t x) {
+    uint8_t * p = (uint8_t *)pp;
+
+    p[3] = x & 0xff;
+    p[2] = (x >> 8) & 0xff;
+    p[1] = (x >> 16) & 0xff;
+    p[0] = (x >> 24) & 0xff;
+}
 
 void SHA1_Transform(uint32_t state[5], const uint8_t buffer[64]);
 
@@ -392,7 +402,7 @@ void HMAC_SHA1_Final(uint8_t d[SHA1_DIGEST_SIZE], HMAC_SHA1_CTX *context) {
 /**
 * Function to compute the digest
 *
-* @param k      key
+* @param k      Key
 * @param klen   Key number of bytes
 * @param in     Buffer to run HMAC on
 * @param inlen  Buffer number of bytes
@@ -406,3 +416,73 @@ void HMAC_SHA1_Buf(const void *k, size_t klen,
 	HMAC_SHA1_Update(&ctx, in, inlen);
 	HMAC_SHA1_Final(d, &ctx);
 }
+
+/**
+* Function to compute the digest
+*
+* @param passwd     Password
+* @param passwdlen  Password number of bytes
+* @param salt       Salt
+* @param saltlen    Salt number of bytes
+* @param c          Number of iterations
+* @param buf        Buffer to run PBKDF2 on
+* @param dkLen      Number of bytes for Key
+*/
+void PBKDF2_SHA1(const uint8_t *passwd, size_t passwdlen, const uint8_t *salt,
+                 size_t saltlen, uint64_t c, uint8_t *buf, size_t dkLen) {
+	HMAC_SHA1_CTX Phctx, PShctx, hctx;
+	size_t i;
+	uint8_t ivec[4];
+	uint8_t U[SHA1_DIGEST_SIZE];
+	uint8_t T[SHA1_DIGEST_SIZE];
+	uint64_t j;
+	int k;
+	size_t clen;
+
+	/* Sanity-check. */
+	assert(dkLen <= SHA1_DIGEST_SIZE * (size_t)(UINT32_MAX));
+
+	/* Compute HMAC state after processing P. */
+	HMAC_SHA1_Init(&Phctx, passwd, passwdlen);
+
+	/* Compute HMAC state after processing P and S. */
+	memcpy(&PShctx, &Phctx, sizeof(HMAC_SHA1_CTX));
+	HMAC_SHA1_Update(&PShctx, salt, saltlen);
+
+	/* Iterate through the blocks. */
+	for (i = 0; i * SHA1_DIGEST_SIZE < dkLen; i++) {
+		/* Generate INT(i + 1). */
+		be32enc(ivec, (uint32_t)(i + 1));
+
+		/* Compute U_1 = PRF(P, S || INT(i)). */
+		memcpy(&hctx, &PShctx, sizeof(HMAC_SHA1_CTX));
+		HMAC_SHA1_Update(&hctx, ivec, 4);
+		HMAC_SHA1_Final(T, &hctx);
+
+		if (c > 1) {
+			/* T_i = U_1 ... */
+			memcpy(U, T, SHA1_DIGEST_SIZE);
+
+			for (j = 2; j <= c; j++) {
+				/* Compute U_j. */
+				memcpy(&hctx, &Phctx, sizeof(HMAC_SHA1_CTX));
+				HMAC_SHA1_Update(&hctx, U, SHA1_DIGEST_SIZE);
+				HMAC_SHA1_Final(U, &hctx);
+
+				/* ... xor U_j ... */
+				for (k = 0; k < SHA1_DIGEST_SIZE; k++) {
+					T[k] ^= U[k];
+                }
+			}
+		}
+
+		/* Copy as many bytes as necessary into buf. */
+		clen = dkLen - i * SHA1_DIGEST_SIZE;
+		if (clen > SHA1_DIGEST_SIZE) {
+			clen = SHA1_DIGEST_SIZE;
+        }
+
+		memcpy(&buf[i * SHA1_DIGEST_SIZE], T, clen);
+	}
+}
+

@@ -32,6 +32,9 @@ void HMAC_SHA1_Init(HMAC_SHA1_CTX *ctx, const void *_k, size_t len);
 void HMAC_SHA1_Update(HMAC_SHA1_CTX *ctx, const void *p, size_t len);
 void HMAC_SHA1_Final(uint8_t d[SHA1_DIGEST_SIZE], HMAC_SHA1_CTX *ctx);
 void HMAC_SHA1_Buf(const void *k, size_t klen, const void *in, size_t inlen,
-    uint8_t d[SHA1_DIGEST_SIZE]);
+                   uint8_t d[SHA1_DIGEST_SIZE]);
+
+void PBKDF2_SHA1(const uint8_t *passwd, size_t passwdlen, const uint8_t *salt,
+                 size_t saltlen, uint64_t count, uint8_t *buf, size_t dkLen);
 
 #endif /* !_SHA1_H_ */
