@@ -1,19 +1,14 @@
-hmac-sha1
+hmac-pbkdf2-sha1
 =========
 
-[![Build Status](https://travis-ci.org/Akagi201/hmac-sha1.svg)](https://travis-ci.org/Akagi201/hmac-sha1)
-
-Standalone implementation of `HMAC()` + `EVP_sha1()` in `OpenSSL`
+Implementation of the SHA1 hash + HMAC + PBKDF2
 
 ## API
 
 ```
-#include "hmac/hmac.h"
+#include "sha1.h"
 
-void hmac_sha1(const uint8_t *k,   /* secret key */
-        size_t lk,  /* length of the key in bytes */
-        const uint8_t *d,   /* data */
-        size_t ld,  /* length of data in bytes */
-        uint8_t *out, /* output buffer, at least "t" bytes */
-        size_t *t);
+void SHA1_Buf(const void *in, size_t len, uint8_t d[SHA1_DIGEST_SIZE]);
+void HMAC_SHA1_Buf(const void *k, size_t klen, const void *in, size_t inlen, uint8_t d[SHA1_DIGEST_SIZE]);
+void PBKDF2_SHA1(const uint8_t *passwd, size_t passwdlen, const uint8_t *salt, size_t saltlen, uint64_t count, uint8_t *buf, size_t dkLen);
 ```
